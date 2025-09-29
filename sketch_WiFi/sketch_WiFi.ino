@@ -180,7 +180,29 @@ void handleReset() {
   ESP.restart();
 }
 
+unsigned long lastAttempt = 0;
+const unsigned long attemptInterval = 10000; // 10s
+
 void loop() {
-  // Maneja las solicitudes entrantes
   server.handleClient();
+  if (WiFi.getMode() == WIFI_AP) {
+    dnsServer.processNextRequest();
+  }
+
+  // Si tenemos credenciales guardadas pero no conectados, intentar cada X segundos
+  if (!WiFi.isConnected() && hasSavedCredentials()) {
+    if (millis() - lastAttempt > attemptInterval) {
+      lastAttempt = millis();
+      Serial.println("Intento de reconexión a credenciales guardadas...");
+      if (connectToSavedNetwork(10000)) {
+        // reiniciar servidor en modo STA (si es necesario reconfigurar)
+        server.reset();
+        server.on("/", handleStatus);
+        server.on("/api/status", handleStatus);
+        server.on("/api/wifi-scan", handleWiFiScan);
+        server.on("/api/reset", HTTP_POST, handleReset);
+        server.begin();
+      }
+    }
+  }
 }

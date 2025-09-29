@@ -131,6 +131,55 @@ void startCaptivePortal() {
   Serial.println("Captive portal iniciado.");
 }
 
+#include <ArduinoJson.h>
+
+void handleStatus() {
+  DynamicJsonDocument doc(256);
+  bool connected = (WiFi.status() == WL_CONNECTED);
+  doc["mode"] = (connected ? "STA" : "AP");
+  doc["ip"] = (connected ? WiFi.localIP().toString() : WiFi.softAPIP().toString());
+
+  preferences.begin("wifi", true);
+  String s = preferences.getString("ssid", "");
+  preferences.end();
+  if (s.length()) {
+    String masked = s;
+    if (masked.length() > 2) masked = masked.substring(0,2) + String("****");
+    doc["saved_ssid"] = masked;
+  } else {
+    doc["saved_ssid"] = "";
+  }
+
+  String out;
+  serializeJson(doc, out);
+  server.send(200, "application/json", out);
+}
+
+void handleWiFiScan() {
+  int n = WiFi.scanNetworks();
+  DynamicJsonDocument doc(1024);
+  JsonArray arr = doc.createNestedArray("networks");
+  for (int i=0;i<n;i++) {
+    JsonObject item = arr.createNestedObject();
+    item["ssid"] = WiFi.SSID(i);
+    item["rssi"] = WiFi.RSSI(i);
+    item["enc"] = WiFi.encryptionType(i);
+  }
+  String out;
+  serializeJson(doc, out);
+  server.send(200, "application/json", out);
+}
+
+void handleReset() {
+  Preferences pref;
+  pref.begin("wifi", false);
+  pref.clear();
+  pref.end();
+  server.send(200, "application/json", "{\"result\":\"credentials_cleared\"}");
+  delay(500);
+  ESP.restart();
+}
+
 void loop() {
   // Maneja las solicitudes entrantes
   server.handleClient();

@@ -69,6 +69,68 @@ bool connectToSavedNetwork(unsigned long timeoutMs = 15000) {
   return false;
 }
 
+#include <DNSServer.h>
+
+DNSServer dnsServer;
+const byte DNS_PORT = 53;
+
+const char* ap_ssid = "ESP32_Config_AP";
+const char* ap_pass = "config123";
+
+const char* captivePage = R"rawliteral(
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+  <h3>Configura la WiFi</h3>
+  <form method="POST" action="/save">
+    <label>SSID:</label><br>
+    <input name="ssid" required><br>
+    <label>Password:</label><br>
+    <input name="password" type="password"><br>
+    <button type="submit">Guardar y conectar</button>
+  </form>
+</body></html>
+)rawliteral";
+
+void startCaptivePortal() {
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ap_ssid, ap_pass);
+
+  delay(500);
+  IPAddress apIP = WiFi.softAPIP();
+  dnsServer.start(DNS_PORT, "*", apIP);
+
+  server.on("/", [](){ server.send(200, "text/html", captivePage); });
+
+  server.on("/save", HTTP_POST, [](){
+    if (server.hasArg("ssid")) {
+      String s = server.arg("ssid");
+      String p = server.arg("password");
+
+      Preferences pref;
+      pref.begin("wifi", false);
+      pref.putString("ssid", s);
+      pref.putString("pass", p);
+      pref.end();
+
+      server.send(200, "application/json", "{\"result\":\"saved\"}");
+
+      delay(500);
+      ESP.restart(); // reiniciar para intentar conectar en modo STA
+    } else {
+      server.send(400, "application/json", "{\"error\":\"missing fields\"}");
+    }
+  });
+
+  server.onNotFound([](){
+    // Redirigir todas las peticiones a la página principal (comportamiento de portal cautivo)
+    server.sendHeader("Location", String("http://") + WiFi.softAPIP().toString(), true);
+    server.send(302, "text/plain", "");
+  });
+
+  server.begin();
+  Serial.println("Captive portal iniciado.");
+}
+
 void loop() {
   // Maneja las solicitudes entrantes
   server.handleClient();

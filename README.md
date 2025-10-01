@@ -398,7 +398,8 @@ Booted in STA mode; API available.
   Paso 1: Conexión al Access Point
   Al iniciar sin credenciales, el ESP32 crea la red ESP32_PROVISION_TEST. Nos conectamos a ella desde un dispositivo móvil.
   | Conexión a la red | Detalles de la red AP |
-  ![ab11d4ed-a51b-4d74-81e8-7421b37ec8fe](https://github.com/user-attachments/assets/abe20c29-24d8-4cfa-8e9c-28bca554ee49)
+  
+  ![Lista de redes WiFi con "ESP32_PROVISION_TEST"](ab11d4ed-a51b-4d74-81e8-7421b37ec8fe.JPG)
 
   ![d0cb2472-28b4-4ce7-b3bd-22937a199313](https://github.com/user-attachments/assets/6c984850-07a2-4de0-9392-c34591ccbbd8)
 
@@ -459,4 +460,5 @@ Booted in STA mode; API available.
 - Mejorar UI del portal (estilos/validaciones).  
 - Autenticación para endpoints sensibles.  
 - Integración con MQTT o plataformas IoT.  
+
 

@@ -1,9 +1,10 @@
 # Aprovisionamiento de Red WiFi con ESP32
 
 ## Descripción del Proyecto
-Este proyecto implementa una solución IoT de **aprovisionamiento dinámico de red WiFi** utilizando el microcontrolador **ESP32**.
+Este proyecto implementa una solución IoT de **aprovisionamiento dinámico de red WiFi** utilizando el microcontrolador **ESP32**. El objetivo principal es eliminar la necesidad de reprogramar el firmware para cambiar las credenciales de red, facilitando la configuración por parte del usuario final.
 
-El dispositivo puede iniciar en **modo Access Point (AP)** cuando no existen credenciales guardadas, mostrando un **portal cautivo web** donde el usuario final puede ingresar el **SSID** y **contraseña** de su red. Estas credenciales se almacenan en **memoria no volátil (NVS)** mediante `Preferences` y el ESP32 se reconecta automáticamente a la red configurada en posteriores reinicios.
+El dispositivo puede iniciar en **modo Access Point (AP)** cuando no existen credenciales guardadas, mostrando un **portal cautivo web** donde el usuario final puede ingresar el **SSID** y **contraseña** de su red. Estas credenciales se almacenan en **memoria no volátil (NVS)** mediante `Preferences` y el ESP32 se reconecta automáticamente a la red configurada en posteriores reinicios. Una vez configurado, el dispositivo se conecta automáticamente a la red especificada en cada reinicio (modo Estación).
+
 
 El sistema expone **endpoints HTTP** para monitoreo y gestión: estado, escaneo de redes y restablecimiento de configuración.
 
@@ -14,7 +15,8 @@ El sistema expone **endpoints HTTP** para monitoreo y gestión: estado, escaneo 
 - Proporcionar una **interfaz web** amigable para capturar SSID y contraseña.  
 - Guardar credenciales en **NVS (Preferences)**.  
 - Reconectar automáticamente a la red configurada (**modo STA**).  
-- Exponer **endpoints REST**: estado, escaneo WiFi y reset.  
+- Exponer **endpoints REST**: estado, escaneo WiFi y reset.
+- Mecanismo de Reseteo: Es posible borrar las credenciales para reconfigurar el dispositivo
 - Documentar diseño, funcionamiento, diagramas UML y validación funcional.  
 
 ---
@@ -69,6 +71,20 @@ Aprovisionamiento-WiFi-ESP32
 | POST   | `/api/reset`     | Borra credenciales guardadas y reinicia el dispositivo. | (opcional) `Accept: application/json` | N/A                              | `{"result":"credentials_cleared"}`                                                   |
 
 ---
+
+## Estructura del Código
+- El código se organiza en las siguientes secciones lógicas:
+
+- Gestión de Credenciales: Funciones como saveCredentials, loadCredentials y clearCredentials que interactúan con la librería Preferences para escribir, leer y borrar datos de la NVS.
+
+- Interfaz Web (HTML): La función htmlPage() genera dinámicamente el código HTML y CSS de la interfaz de configuración, asegurando que no se necesiten archivos externos.
+
+- Manejadores de Peticiones (Handlers): Funciones que gestionan las rutas del servidor web, como handleRoot, handleSave, handleStatus, handleScan y handleReset.
+
+- Lógica de Conexión: Las funciones setup() y tryConnectStored() contienen la lógica principal para decidir si iniciar en modo AP o STA.
+
+- Bucle Principal: La función loop() se encarga de procesar las peticiones del cliente web y del servidor DNS continuamente.
+
 
 ## Código Fuente Principal (`esp32_ap_config_no_reset.ino`)
 ```cpp
@@ -378,6 +394,40 @@ Captive portal AP started. IP: 192.168.4.1
 Booted in STA mode; API available.
 ```
 
+### Validación Funcional
+  Paso 1: Conexión al Access Point
+  Al iniciar sin credenciales, el ESP32 crea la red ESP32_PROVISION_TEST. Nos conectamos a ella desde un dispositivo móvil.
+  | Conexión a la red | Detalles de la red AP |
+  ![ab11d4ed-a51b-4d74-81e8-7421b37ec8fe](https://github.com/user-attachments/assets/abe20c29-24d8-4cfa-8e9c-28bca554ee49)
+
+  ![d0cb2472-28b4-4ce7-b3bd-22937a199313](https://github.com/user-attachments/assets/6c984850-07a2-4de0-9392-c34591ccbbd8)
+
+  Paso 2: Acceso al Portal Cautivo y Escaneo de Redes
+  Al conectarse, se accede a la IP 192.168.4.1. La interfaz permite escanear las redes WiFi disponibles, mostrando el resultado en formato JSON.
+  | Portal de Configuración | Resultado del Escaneo | Log del Monitor Serie |
+  ![6577b077-6ef2-46c3-9551-7815308e0933](https://github.com/user-attachments/assets/a8d70eba-256d-4cea-96fe-976ecded60f0)
+
+  ![591fd96d-b875-4c8f-b049-e046d05a1c5f](https://github.com/user-attachments/assets/384f8596-d4ce-46be-9fb1-f346723d7cd9)
+
+![d7e39424-3b7c-46a2-a410-f851303c5cd5](https://github.com/user-attachments/assets/e10e141c-4153-4d74-be5b-6db0369e0a4c)
+  
+  Paso 3: Envío de Credenciales
+  Se introducen el SSID y la contraseña de la red local y se presiona "Save & Connect". El monitor serie confirma la recepción de los datos a través del endpoint /save.
+  | Formulario con datos | Log del Monitor Serie |
+  ![ea42efb7-1472-4970-94be-a4ee43522c90](https://github.com/user-attachments/assets/de1e73b6-0542-4995-b1f2-1cd6feaa80e5)
+  
+  ![a204f24a-2b82-4c5f-8f18-5dbc51b13bd3](https://github.com/user-attachments/assets/7e0b62c2-8132-47a2-b283-cdba7e4ad32d)
+  
+  Paso 4: Verificación de Estado y Restablecimiento
+  Una vez conectado en modo STA, se puede consultar el endpoint /status para verificar la conexión. Finalmente, se prueba la función de reseteo, la cual solicita confirmación y limpia la NVS, reiniciando el portal.
+  | Diálogo de reseteo | Log del Monitor Serie |
+  
+  ![9d3467c2-4dd6-41ab-be42-d7f499ff0881](https://github.com/user-attachments/assets/ca544d33-48e0-412a-894e-f5b2493ad5d1)
+
+![6daa4a3c-767c-4a22-a979-a37e02044d1a](https://github.com/user-attachments/assets/b35c4052-2f50-4646-a4cf-a2c7c1af69f1)
+
+![4eb78183-0c54-410c-afe6-30c8613a3f25](https://github.com/user-attachments/assets/1ed71589-46bb-4d73-bd69-32da746c22db)
+
 ### Prueba de Conectividad
 1) Conectarse a la red AP `ESP32_Config_AP` (clave `config123`).  
 2) Abrir `http://192.168.4.1/` y completar el formulario.  
@@ -409,3 +459,4 @@ Booted in STA mode; API available.
 - Mejorar UI del portal (estilos/validaciones).  
 - Autenticación para endpoints sensibles.  
 - Integración con MQTT o plataformas IoT.  
+

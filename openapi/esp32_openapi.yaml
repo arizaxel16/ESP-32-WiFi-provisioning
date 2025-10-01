@@ -1,0 +1,256 @@
+openapi: 3.0.1
+info:
+  title: ESP32 WiFi Config API
+  version: 1.0.0
+  description: |
+    API local para configurar y consultar el estado del ESP32. Diseñada para uso en red local
+    (modo AP: 192.168.4.1; modo STA: usar la IP asignada por el router).
+servers:
+  - url: http://{host}
+    description: Dirección IP del ESP (reemplazar {host} por la IP local o usar 192.168.4.1 en AP)
+    variables:
+      host:
+        default: 192.168.4.1
+
+tags:
+  - name: Portal
+    description: Endpoints usados por el portal cautivo / UI
+  - name: API
+    description: Endpoints REST para integración y diagnóstico
+
+paths:
+  /:
+    get:
+      tags:
+        - Portal
+      summary: Página principal (portal cautivo / UI)
+      description: Devuelve la página HTML del portal cautivo cuando el dispositivo está en modo AP. En modo STA puede devolver una página de status simple.
+      responses:
+        '200':
+          description: HTML de la página principal
+          content:
+            text/html:
+              schema:
+                type: string
+              examples:
+                portal:
+                  summary: Página del portal cautivo
+                  value: "<html>...formulario de configuración...</html>"
+
+  /save:
+    post:
+      tags:
+        - Portal
+      summary: Guardar credenciales WiFi (portal cautivo)
+      description: |
+        Recibe `ssid` y `password` vía `application/x-www-form-urlencoded` (form HTML).
+        Al guardar correctamente, el dispositivo responde con JSON y normalmente se reinicia para intentar conectar en modo STA.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SaveForm'
+            examples:
+              example-1:
+                summary: Guardar credenciales WPA2
+                value:
+                  ssid: "MiRedCasa"
+                  password: "miPasswordSeguro"
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveJson'
+            examples:
+              json-example:
+                summary: Guardar credenciales via JSON
+                value:
+                  ssid: "MiRedCasa"
+                  password: "miPasswordSeguro"
+      responses:
+        '200':
+          description: Credenciales guardadas (respuesta inmediata antes de reinicio)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+              examples:
+                ok:
+                  value:
+                    result: "saved"
+        '400':
+          description: Petición inválida (campos faltantes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing:
+                  value:
+                    error: "missing fields"
+
+  /api/status:
+    get:
+      tags:
+        - API
+      summary: Estado del dispositivo
+      description: Devuelve el modo actual (AP/STA), IP, estado de la conexión y SSID guardado (parcialmente enmascarado).
+      responses:
+        '200':
+          description: Estado del dispositivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+              examples:
+                sta-example:
+                  summary: Estado en modo STA
+                  value:
+                    mode: "STA"
+                    ip: "192.168.1.42"
+                    connected: true
+                    saved_ssid: "MiRe****"
+                ap-example:
+                  summary: Estado en modo AP
+                  value:
+                    mode: "AP"
+                    ip: "192.168.4.1"
+                    connected: false
+                    saved_ssid: ""
+
+  /api/wifi-scan:
+    get:
+      tags:
+        - API
+      summary: Escaneo de redes WiFi locales
+      description: Escanea redes WiFi y devuelve una lista con SSID, RSSI y tipo de cifrado.
+      responses:
+        '200':
+          description: Lista de redes encontradas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResponse'
+              examples:
+                scan-example:
+                  value:
+                    networks:
+                      - ssid: "MiRedCasa"
+                        rssi: -45
+                        enc: 4
+                      - ssid: "CafeLibre"
+                        rssi: -78
+                        enc: 0
+
+  /api/reset:
+    post:
+      tags:
+        - API
+      summary: Borrar credenciales y reiniciar
+      description: Borra las credenciales guardadas en NVS y reinicia el dispositivo. Uso para reconfigurar desde cero.
+      responses:
+        '200':
+          description: Credenciales borradas y reinicio (respuesta antes del reinicio)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetResponse'
+              examples:
+                cleared:
+                  value:
+                    result: "credentials_cleared"
+
+components:
+  schemas:
+    SaveForm:
+      type: object
+      properties:
+        ssid:
+          type: string
+          description: Nombre de la red WiFi a la que se desea conectar.
+        password:
+          type: string
+          description: Contraseña de la red (puede estar vacía para redes abiertas).
+      required:
+        - ssid
+
+    SaveJson:
+      type: object
+      properties:
+        ssid:
+          type: string
+        password:
+          type: string
+      required:
+        - ssid
+
+    SaveResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          example: saved
+      description: Respuesta enviada inmediatamente después de guardar credenciales.
+
+    ResetResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          example: credentials_cleared
+
+    StatusResponse:
+      type: object
+      properties:
+        mode:
+          type: string
+          description: Modo operativo del dispositivo ("STA" o "AP").
+          example: STA
+        ip:
+          type: string
+          description: Dirección IP actual del ESP (IP local o AP IP).
+          example: 192.168.1.42
+        connected:
+          type: boolean
+          description: Indica si el ESP está actualmente conectado a una red externa (modo STA).
+          example: true
+        saved_ssid:
+          type: string
+          description: SSID guardado (parcialmente enmascarado para privacidad).
+          example: mynet****
+
+    ScanResponse:
+      type: object
+      properties:
+        networks:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkItem'
+
+    NetworkItem:
+      type: object
+      properties:
+        ssid:
+          type: string
+          example: MyWiFi
+        rssi:
+          type: integer
+          example: -52
+        enc:
+          type: integer
+          description: Valor numérico del tipo de cifrado (por ejemplo, 0 = open, 4 = WPA2)
+          example: 4
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: missing fields
+      description: Respuesta de error genérica para peticiones inválidas.
+
+security:
+  - {}   # No auth (local network only). En ambientes de producción definir seguridad.
+
+externalDocs:
+  description: Ejemplo de uso / Postman collection
+  url: https://example.com/docs/esp32-wifi-config
